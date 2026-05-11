@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a73e8" />
+  <title>평생교육기관 지도</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=aevnom0ms5"></script>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="top-overlay">
+    <div class="logo" aria-label="경기맵">경기맵</div>
+    <button id="donate-btn" class="donate-btn" aria-label="개발자에게 후원하기">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+        <path d="M12 21s-7.5-4.6-9.8-9.3C.6 7.9 2.9 4 6.6 4c2 0 3.6 1 4.4 2.5C12 4.9 13.6 4 15.6 4c3.7 0 6 3.9 4.4 7.7C19.5 16.4 12 21 12 21z"/>
+      </svg>
+      <span>후원</span>
+    </button>
+  </div>
+
+  <button id="locate-btn" class="fab" aria-label="현재 위치로 이동">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+      <circle cx="12" cy="12" r="9"></circle>
+    </svg>
+  </button>
+
+  <div id="loading" class="loading">데이터 불러오는 중…</div>
+
+  <div id="sheet-backdrop" class="sheet-backdrop" aria-hidden="true"></div>
+
+  <section id="bottom-sheet" class="bottom-sheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <button id="sheet-close" class="sheet-close" aria-label="닫기">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 6 6 18M6 6l12 12"></path>
+      </svg>
+    </button>
+
+    <div class="sheet-content">
+      <header class="sheet-header">
+        <h2 id="sheet-title" class="sheet-title"></h2>
+        <p id="sheet-region" class="sheet-region"></p>
+      </header>
+
+      <div id="sheet-keywords" class="sheet-keywords"></div>
+
+      <ul class="sheet-info">
+        <li id="row-address" class="info-row">
+          <span class="info-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </span>
+          <span class="info-text"></span>
+        </li>
+        <li id="row-phone" class="info-row">
+          <span class="info-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+          </span>
+          <a class="info-text info-link" href="#"></a>
+        </li>
+        <li id="row-homepage" class="info-row">
+          <span class="info-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </span>
+          <a class="info-text info-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+        </li>
+      </ul>
+
+      <section id="courses-section" class="sheet-section">
+        <h3 class="section-title">대표 강좌</h3>
+        <ul id="courses-list" class="courses-list"></ul>
+      </section>
+    </div>
+  </section>
+
+  <div id="donate-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="donate-title">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <button id="donate-close" class="modal-close" aria-label="닫기">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+      <h2 id="donate-title" class="modal-title">생활에 도움이 되는 서비스를<br/>계속 만들어볼께요 💛</h2>
+      <p class="modal-desc">도움이 되었다면 응원 부탁드리겠습니다 🙏</p>
+      <div id="donate-actions" class="donate-actions">
+        <a class="donate-option donate-kakao" href="https://qr.kakaopay.com/Ej9JcHXpx" target="_blank" rel="noopener noreferrer">
+          <span class="donate-option-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 3C6.48 3 2 6.48 2 10.8c0 2.79 1.84 5.23 4.61 6.61L5.5 21l4.04-2.21c.8.1 1.62.16 2.46.16 5.52 0 10-3.48 10-7.8S17.52 3 12 3z"/>
+            </svg>
+          </span>
+          <span class="donate-option-text">
+            <span class="donate-option-label">카카오페이로 후원하기</span>
+            <span class="donate-option-sub">탭하면 카카오톡이 열려요</span>
+          </span>
+        </a>
+        <button id="donate-copy" class="donate-option donate-copy" type="button">
+          <span class="donate-option-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </span>
+          <span class="donate-option-text">
+            <span class="donate-option-label">링크 복사</span>
+            <span class="donate-option-sub">PC에선 모바일에 공유해서 사용</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
