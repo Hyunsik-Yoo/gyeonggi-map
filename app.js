@@ -50,7 +50,7 @@
 
   // ---------- CSV load ----------
   function loadData() {
-    Papa.parse('sample.csv', {
+    Papa.parse('data.csv', {
       download: true,
       header: true,
       skipEmptyLines: true,
