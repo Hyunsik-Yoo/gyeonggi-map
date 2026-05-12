@@ -2,7 +2,7 @@
   'use strict';
 
   const DEFAULT_CENTER = { lat: 37.4979, lng: 127.0276 }; // 강남역
-  const DEFAULT_ZOOM = 15;
+  const DEFAULT_ZOOM = 14;
   const FOCUS_ZOOM = 15;
 
   let map;
@@ -10,6 +10,7 @@
   let userAccuracyCircle = null;
   let activeMarker = null;
   let activeOriginalIcon = null;
+  let markerClusterer = null;
 
   const els = {
     loading: document.getElementById('loading'),
@@ -53,21 +54,22 @@
 
   // ---------- CSV load ----------
   function loadData() {
-    Papa.parse('data.csv', {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows = results.data
-          .map(normalizeRow)
-          .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
-        addMarkers(rows);
-        hideLoading();
-      },
-      error: (err) => {
-        console.error('CSV load error:', err);
-        els.loading.textContent = '데이터를 불러올 수 없습니다.';
-      },
+    return new Promise((resolve, reject) => {
+      Papa.parse('data.csv', {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const rows = results.data
+            .map(normalizeRow)
+            .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+          resolve(rows);
+        },
+        error: (err) => {
+          console.error('CSV load error:', err);
+          reject(err);
+        },
+      });
     });
   }
 
@@ -113,11 +115,10 @@
 
   // ---------- Markers ----------
   function addMarkers(rows) {
-    rows.forEach((row) => {
+    const markers = rows.map((row) => {
       const position = new naver.maps.LatLng(row.lat, row.lng);
       const marker = new naver.maps.Marker({
         position,
-        map,
         title: row.name,
         icon: defaultMarkerIcon(),
       });
@@ -125,6 +126,26 @@
       naver.maps.Event.addListener(marker, 'click', () => {
         focusMarker(marker, row);
       });
+
+      return marker;
+    });
+
+    markerClusterer = new MarkerClustering({
+      map,
+      markers,
+      minClusterSize: 2,
+      maxZoom: 16,
+      gridSize: 120,
+      disableClickZoom: false,
+      averageCenter: true,
+      icons: clusterIcons(),
+      indexGenerator: [10, 50, 200, 1000],
+      stylingFunction: (clusterMarker, count) => {
+        const el = clusterMarker.getElement();
+        if (!el) return;
+        const label = el.querySelector('.cluster-count');
+        if (label) label.textContent = count;
+      },
     });
   }
 
@@ -138,6 +159,27 @@
       size: new naver.maps.Size(28, 28),
       anchor: new naver.maps.Point(14, 14),
     };
+  }
+
+  function clusterIcons() {
+    const tiers = [
+      { size: 40, fontSize: 13, bg: '#4f8ff0' },
+      { size: 48, fontSize: 14, bg: '#1a73e8' },
+      { size: 56, fontSize: 15, bg: '#1557b0' },
+      { size: 66, fontSize: 16, bg: '#0b3d91' },
+      { size: 76, fontSize: 17, bg: '#062a6b' },
+    ];
+    return tiers.map((t) => ({
+      content: `<div style="
+        cursor:pointer;width:${t.size}px;height:${t.size}px;
+        display:flex;align-items:center;justify-content:center;
+        background:${t.bg};border:3px solid rgba(255,255,255,0.95);
+        border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,0.25);
+        color:#fff;font-weight:700;font-size:${t.fontSize}px;letter-spacing:-0.02em;
+      "><span class="cluster-count"></span></div>`,
+      size: new naver.maps.Size(t.size, t.size),
+      anchor: new naver.maps.Point(t.size / 2, t.size / 2),
+    }));
   }
 
   function activeMarkerIcon() {
@@ -312,20 +354,26 @@
   }
 
   function requestInitialLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const latLng = new naver.maps.LatLng(latitude, longitude);
-        showUserLocation(latLng, accuracy);
-        map.setCenter(latLng);
-        map.setZoom(FOCUS_ZOOM);
-      },
-      (err) => {
-        console.warn('Initial geolocation unavailable, using default center:', err);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const latLng = new naver.maps.LatLng(latitude, longitude);
+          showUserLocation(latLng, accuracy);
+          map.setCenter(latLng);
+          resolve();
+        },
+        (err) => {
+          console.warn('Initial geolocation unavailable, using default center:', err);
+          resolve();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    });
   }
 
   // ---------- Helpers ----------
@@ -423,8 +471,18 @@
     }
     initMap();
     bind();
-    loadData();
-    requestInitialLocation();
+
+    // CSV와 위치권한을 병렬로 시작하되, 두 가지가 모두 끝난 뒤에야 마커를 올린다.
+    // 그래야 클러스터가 최종 viewport(사용자 위치 또는 강남역 디폴트) 기준으로 만들어진다.
+    Promise.all([loadData(), requestInitialLocation()])
+      .then(([rows]) => {
+        addMarkers(rows);
+        hideLoading();
+      })
+      .catch((err) => {
+        console.error('Init error:', err);
+        els.loading.textContent = '데이터를 불러올 수 없습니다.';
+      });
   }
 
   if (document.readyState === 'loading') {
