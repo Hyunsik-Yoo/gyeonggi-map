@@ -1,8 +1,8 @@
 (function () {
   'use strict';
 
-  const DEFAULT_CENTER = { lat: 37.5666103, lng: 126.9783882 }; // 서울시청
-  const DEFAULT_ZOOM = 8;
+  const DEFAULT_CENTER = { lat: 37.4979, lng: 127.0276 }; // 강남역
+  const DEFAULT_ZOOM = 15;
   const FOCUS_ZOOM = 15;
 
   let map;
@@ -29,6 +29,9 @@
     donateModal: document.getElementById('donate-modal'),
     donateClose: document.getElementById('donate-close'),
     donateCopy: document.getElementById('donate-copy'),
+    logoBtn: document.getElementById('logo-btn'),
+    aboutModal: document.getElementById('about-modal'),
+    aboutClose: document.getElementById('about-close'),
   };
 
   const DONATE_URL = 'https://qr.kakaopay.com/Ej9JcHXpx';
@@ -110,8 +113,6 @@
 
   // ---------- Markers ----------
   function addMarkers(rows) {
-    const bounds = new naver.maps.LatLngBounds();
-
     rows.forEach((row) => {
       const position = new naver.maps.LatLng(row.lat, row.lng);
       const marker = new naver.maps.Marker({
@@ -124,13 +125,7 @@
       naver.maps.Event.addListener(marker, 'click', () => {
         focusMarker(marker, row);
       });
-
-      bounds.extend(position);
     });
-
-    if (rows.length > 0) {
-      map.fitBounds(bounds, { top: 60, right: 40, bottom: 80, left: 40 });
-    }
   }
 
   function defaultMarkerIcon() {
@@ -266,38 +261,7 @@
         els.locateBtn.classList.remove('loading-pulse');
         const { latitude, longitude, accuracy } = pos.coords;
         const latLng = new naver.maps.LatLng(latitude, longitude);
-
-        if (userMarker) {
-          userMarker.setPosition(latLng);
-        } else {
-          userMarker = new naver.maps.Marker({
-            position: latLng,
-            map,
-            icon: {
-              content: `<div style="
-                width:18px;height:18px;border-radius:50%;
-                background:#4285f4;border:3px solid #fff;
-                box-shadow:0 0 0 2px rgba(66,133,244,0.4), 0 2px 6px rgba(0,0,0,0.3);
-              "></div>`,
-              size: new naver.maps.Size(18, 18),
-              anchor: new naver.maps.Point(9, 9),
-            },
-            zIndex: 1000,
-          });
-        }
-
-        if (userAccuracyCircle) userAccuracyCircle.setMap(null);
-        userAccuracyCircle = new naver.maps.Circle({
-          map,
-          center: latLng,
-          radius: Math.min(accuracy || 50, 500),
-          strokeColor: '#4285f4',
-          strokeOpacity: 0.4,
-          strokeWeight: 1,
-          fillColor: '#4285f4',
-          fillOpacity: 0.12,
-        });
-
+        showUserLocation(latLng, accuracy);
         map.morph(latLng, FOCUS_ZOOM);
       },
       (err) => {
@@ -309,6 +273,56 @@
           3: '위치 확인 시간이 초과되었습니다.',
         };
         alert(messages[err.code] || '위치를 가져올 수 없습니다.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  function showUserLocation(latLng, accuracy) {
+    if (userMarker) {
+      userMarker.setPosition(latLng);
+    } else {
+      userMarker = new naver.maps.Marker({
+        position: latLng,
+        map,
+        icon: {
+          content: `<div style="
+            width:18px;height:18px;border-radius:50%;
+            background:#4285f4;border:3px solid #fff;
+            box-shadow:0 0 0 2px rgba(66,133,244,0.4), 0 2px 6px rgba(0,0,0,0.3);
+          "></div>`,
+          size: new naver.maps.Size(18, 18),
+          anchor: new naver.maps.Point(9, 9),
+        },
+        zIndex: 1000,
+      });
+    }
+
+    if (userAccuracyCircle) userAccuracyCircle.setMap(null);
+    userAccuracyCircle = new naver.maps.Circle({
+      map,
+      center: latLng,
+      radius: Math.min(accuracy || 50, 500),
+      strokeColor: '#4285f4',
+      strokeOpacity: 0.4,
+      strokeWeight: 1,
+      fillColor: '#4285f4',
+      fillOpacity: 0.12,
+    });
+  }
+
+  function requestInitialLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const latLng = new naver.maps.LatLng(latitude, longitude);
+        showUserLocation(latLng, accuracy);
+        map.setCenter(latLng);
+        map.setZoom(FOCUS_ZOOM);
+      },
+      (err) => {
+        console.warn('Initial geolocation unavailable, using default center:', err);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
@@ -331,6 +345,16 @@
   function closeDonateModal() {
     els.donateModal.classList.remove('open');
     els.donateModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openAboutModal() {
+    els.aboutModal.classList.add('open');
+    els.aboutModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeAboutModal() {
+    els.aboutModal.classList.remove('open');
+    els.aboutModal.setAttribute('aria-hidden', 'true');
   }
 
   async function copyDonateLink() {
@@ -378,10 +402,15 @@
     els.donateModal.querySelector('.modal-backdrop').addEventListener('click', closeDonateModal);
     els.donateCopy.addEventListener('click', copyDonateLink);
 
+    els.logoBtn.addEventListener('click', openAboutModal);
+    els.aboutClose.addEventListener('click', closeAboutModal);
+    els.aboutModal.querySelector('.modal-backdrop').addEventListener('click', closeAboutModal);
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeSheet();
         closeDonateModal();
+        closeAboutModal();
       }
     });
   }
@@ -395,6 +424,7 @@
     initMap();
     bind();
     loadData();
+    requestInitialLocation();
   }
 
   if (document.readyState === 'loading') {
